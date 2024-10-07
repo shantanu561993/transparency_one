@@ -214,7 +214,6 @@ async fn dump_single_log(log_url:String,threads:usize,mongo_collection:Arc<mongo
                 let parsed_entries = generic_utils::read_base64_entries(&data).await.unwrap_or_else(|error| generic_utils::Entries{entries:vec![]}); 
                 for entry in parsed_entries.entries{
                     let domain_data = merkle_tree::utils::read_entry(&entry).await;
-                    println!("{:?}",domain_data);
                     for (key,value) in domain_data{
                         for domain in value{
                             let domain = Domain{domain:domain};
