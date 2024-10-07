@@ -172,6 +172,7 @@ async fn dump_function(log_name:String,connection_string:String,threads:usize,mo
     println!("[+] Starting to fetch log: {}",log_name);
     dump_single_log(log_url.to_string(),threads,mongo_collection).await;
 }
+
 async fn dump_single_log(log_url:String,threads:usize,mongo_collection:Arc<mongodb::Collection<Domain>>){
     let mut endpoint_url = log_url.clone();
     endpoint_url.push_str("ct/v1/get-sth");
@@ -199,6 +200,7 @@ async fn dump_single_log(log_url:String,threads:usize,mongo_collection:Arc<mongo
     }
     let fetches = futures::stream::iter(
         urls.into_iter().map(|path| {
+            let mongo_collection_clone = Arc::clone(&mongo_collection);
             let mut data = String::new();
             async move {
                 loop{
@@ -217,14 +219,10 @@ async fn dump_single_log(log_url:String,threads:usize,mongo_collection:Arc<mongo
                         for domain in value{
                             let domain = Domain{domain:domain};
                             println!("[+] Inserting domain: {}",domain.domain);
-                            // match mongo_collection.insert_one(domain).await{
-                            //     Ok(_)=>{
-                            //         println!("[+] Inserted domain: {}",domain.domain);
-                            //     },
-                            //     Err(_)=>{
-                            //         println!("[-] Failed to insert domain: {}",domain.domain);
-                            //     }
-                            // };
+                            match mongo_collection_clone.insert_one(domain).await{
+                                Ok(_)=>{},
+                                Err(_)=>{}
+                            };
                         }
                     }
                 }
