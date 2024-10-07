@@ -217,7 +217,6 @@ async fn dump_single_log(log_url:String,threads:usize,mongo_collection:Arc<mongo
                     for (key,value) in domain_data{
                         for domain in value{
                             let domain = Domain{domain:domain};
-                            println!("[+] Inserting domain: {}",domain.domain);
                             match mongo_collection_clone.insert_one(domain).await{
                                 Ok(_)=>{},
                                 Err(_)=>{}
