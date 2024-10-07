@@ -230,7 +230,7 @@ async fn dump_single_log(log_url:String,threads:usize,mongo_collection:Arc<mongo
                 }
             }
         })
-    ).buffer_unordered(1).collect::<Vec<()>>();
+    ).buffer_unordered(threads).collect::<Vec<()>>();
     fetches.await;
     // let paths = vec![
     // "https://example.com/?lol=1".to_string(),
