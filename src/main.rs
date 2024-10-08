@@ -1,13 +1,17 @@
 use log_structs::Operator;
+use mongodb::error::{self, BulkWriteError, BulkWriteFailure};
 use reqwest::Error;
 use futures::StreamExt;
 use tokio::task::JoinHandle;
+use std::vec;
 use std::{collections::HashMap, env};
 mod log_structs;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 mod generic_utils;
 mod merkle_tree;
+//remember to use mongodb 2.6.1 , in version 3.1.0 im not sure how to use the insertmany options
+use mongodb::options::InsertManyOptions;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 struct Domain {
@@ -164,10 +168,9 @@ async fn dump_function(log_name:String,connection_string:String,threads:usize,mo
         .keys(mongodb::bson::doc! { "domain": 1 })
         .options(mongodb::options::IndexOptions::builder().unique(true).build())
         .build();
-    mongo_collection.create_index(index_model).await.unwrap_or_else(|_op|panic!("Something went wrong creating index"));
+    mongo_collection.create_index(index_model,None).await.unwrap_or_else(|_op|panic!("Something went wrong creating index"));
     println!("[+] DB Connection Established");
     let operators: HashMap<String, String> = get_all_operators().await;
-    println!("{:?}",operators);
     let log_url = operators.get(&log_name).unwrap_or_else(|| panic!("Log not found"));
     println!("[+] Starting to fetch log: {}",log_name);
     dump_single_log(log_url.to_string(),threads,mongo_collection).await;
@@ -212,18 +215,40 @@ async fn dump_single_log(log_url:String,threads:usize,mongo_collection:Arc<mongo
                     continue;
                 }
                 let parsed_entries = generic_utils::read_base64_entries(&data).await.unwrap_or_else(|error| generic_utils::Entries{entries:vec![]}); 
+                let mut push_data: Vec<Domain> = vec![];
                 for entry in parsed_entries.entries{
                     let domain_data = merkle_tree::utils::read_entry(&entry).await;
+                    // println!("{:?}",domain_data);
                     for (key,value) in domain_data{
                         for domain in value{
                             let domain = Domain{domain:domain};
-                            match mongo_collection_clone.insert_one(domain).await{
-                                Ok(_)=>{},
-                                Err(_)=>{}
-                            };
+                            //for debugging
+                            // println!("{:?}",domain);
+                            push_data.push(domain);
                         }
                     }
                 }
+                let options: InsertManyOptions = InsertManyOptions::builder().ordered(false).build();
+                // let push_data = vec![Domain{domain:"test".to_string()},Domain{domain:"test2".to_string()},Domain{domain:"test".to_string()},Domain{domain:"test2".to_string()},Domain{domain:"test".to_string()},Domain{domain:"test2".to_string()},Domain{domain:"test".to_string()},Domain{domain:"test2".to_string()},Domain{domain:"test".to_string()},Domain{domain:"test2".to_string()},Domain{domain:"test".to_string()},Domain{domain:"test2".to_string()},Domain{domain:"test".to_string()},Domain{domain:"test2".to_string()},Domain{domain:"test".to_string()},Domain{domain:"test3".to_string()}];
+                match mongo_collection_clone.insert_many(push_data,options).await{
+                    Ok(_)=>{},
+                    Err(error)=>{
+                        //print datatype of error
+                        if let mongodb::error::ErrorKind::BulkWrite(BulkWriteFailure { write_errors: Some(write_errors), .. }) = error.kind.as_ref(){
+                            for error in write_errors {
+                                if error.message.contains("E11000 duplicate key error collection"){ //expecting duplicate domain input error
+                                    continue;
+                                }
+                                else{
+                                    panic!("=======================================================Error: {}",error.message);
+                                }
+                            }
+                        }
+                        else{
+                            println!("=======================================================Error: {}",error);
+                        }
+                    },
+                };
             }
         })
     ).buffer_unordered(threads).collect::<Vec<()>>();

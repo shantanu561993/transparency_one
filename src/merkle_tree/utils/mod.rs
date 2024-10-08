@@ -23,13 +23,18 @@ pub async fn read_entry(entry:&Entry) -> HashMap<String,Vec<String>>{
     }
     else if mkl.log_entry_type == ELogEntryType::PrecertLogEntryType {
         let extra_data = PreCertEntry::new_b64(&entry.extra_data);
-        let leaf_cert = X509::from_der(&extra_data.leaf_cert.cert_data).unwrap();
         let mut chain :Vec<X509> = Vec::new();
-        for cert in extra_data.chain.chain{
-            let temp_cert = X509::from_der(&cert.cert_data).unwrap();
-            chain.push(temp_cert);
+        let leaf_cert = X509::from_der(&extra_data.leaf_cert.cert_data);
+        match leaf_cert{
+            Ok(lcert)=>{
+                for ecert in extra_data.chain.chain{
+                let temp_cert = X509::from_der(&ecert.cert_data).unwrap();
+                chain.push(temp_cert);
+            }
+            return_data = read_domains(&lcert,&chain).await;},
+            Err(e)=>{println!("======================================================Error reading leaf cert: {}",e);}
         }
-        return_data = read_domains(&leaf_cert,&chain).await;
+        
     }
     return return_data;
 }
